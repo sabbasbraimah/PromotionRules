@@ -30,12 +30,12 @@ public class Scan {
     }
 
 
-    public  String getScannerInput(){
+    public  static String getScannerInput(){
         Scanner scan = new Scanner(System.in);
         return scan.nextLine();
     }
 
-    public  List<Product> scan(){
+    public  static List<Product> scan(){
         String validCodeExpression = "^00[1-3]$";
 
         do {

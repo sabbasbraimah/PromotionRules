@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 
 public class Main {
 
-    private static List<com.seidu.Product> cart = new ArrayList<>();
+    private static List<Product> cart = new ArrayList<>();
     private static Map<String, ProductInfo> prodInfo = new HashMap<>();
     private static  Map<String, Long> codeToQuantity = new HashMap<>();
     private static Map<String,BigDecimal> totalPriceOfQuantityOfSpecificItemPurchased = new HashMap<>();
@@ -20,11 +20,11 @@ public class Main {
     private  static BigDecimal percentageReduction;
 
     static {
-        prodInfo.put("001", new com.seidu.ProductInfo("001","Travel Card Holder",
+        prodInfo.put("001", new ProductInfo("001","Travel Card Holder",
                 new BigDecimal(9.25)));
-        prodInfo.put("002", new com.seidu.ProductInfo("002","Personalized Cufflinks",
+        prodInfo.put("002", new ProductInfo("002","Personalized Cufflinks",
                 new BigDecimal(45.00)));
-        prodInfo.put("003", new com.seidu.ProductInfo("003","Kid's T-Shirt",
+        prodInfo.put("003", new ProductInfo("003","Kid's T-Shirt",
                 new BigDecimal(19.95)));
     }
 
@@ -40,14 +40,17 @@ public class Main {
     public static void main(String[] args) {
 
         Main promPrice = new Main(new BigDecimal(8.50),
-                new BigDecimal(9.25), "001", percentageReduction);
+                new BigDecimal(9.25), "001", new BigDecimal(0.1)
+                .setScale(2,BigDecimal.ROUND_HALF_EVEN));
+
         Scan scan = new Scan();
         Map<String, Long> numberOfEachItem = countItemByProductCode(scan.scan());
         System.out.println( "Quantity by Item Price  : " +
                 multiplyItemQuantityByItemPrice(numberOfEachItem));
+
         Map<String, BigDecimal> processedPrice =    processPromotionPrice(  numberOfEachItem);
-        calculateTotals(processedPrice);
-        displayTotalPrice(percentageReduction);
+        addItemTotals(processedPrice);
+        displayShoppingTotal(percentageReduction);
     }
 
     public static String getItemCode() {
@@ -62,21 +65,10 @@ public class Main {
         return originalPrice;
     }
 
-    public static Map<String, BigDecimal> processPromotionPrice(  Map<String, Long> numberOfEachItem) {
-
-        PromotionRules<String, BigDecimal, Boolean> promotionRules =
-                (a, b) -> a.equalsIgnoreCase(getItemCode()) && b.compareTo(getOriginalPrice()) > 0;
-
-        Map<String, BigDecimal> pricesAfterApplyingPromotionRules =
-                calculatePromotionPrice( multiplyItemQuantityByItemPrice(numberOfEachItem), codeToQuantity,
-                        promotionRules);
-        return pricesAfterApplyingPromotionRules;
-    }
-
     public static Map<String, Long>  countItemByProductCode(List<Product> productCodes){
-            codeToQuantity = productCodes.parallelStream()
-                    .collect(Collectors.groupingBy(product -> product.getProductCode(), Collectors.counting()));
-            return codeToQuantity;
+        codeToQuantity = productCodes.parallelStream()
+                .collect(Collectors.groupingBy(product -> product.getProductCode(), Collectors.counting()));
+        return codeToQuantity;
     }
 
     public static  Map<String, BigDecimal> multiplyItemQuantityByItemPrice(Map<String,Long> items) {
@@ -94,25 +86,32 @@ public class Main {
         return totalPriceOfQuantityOfSpecificItemPurchased;
     }
 
+    public static Map<String, BigDecimal> processPromotionPrice(  Map<String, Long> numberOfEachItem) {
+        PromotionRules<String, BigDecimal, Boolean> promotionRules =
+                (a, b) -> a.equalsIgnoreCase(getItemCode()) && b.compareTo(getOriginalPrice()) > 0;
+
+        Map<String, BigDecimal> pricesAfterApplyingPromotionRules =
+                calculatePromotionPrice(multiplyItemQuantityByItemPrice(numberOfEachItem), promotionRules);
+        return pricesAfterApplyingPromotionRules;
+    }
+
     public static Map<String, BigDecimal> calculatePromotionPrice(Map<String, BigDecimal> codeToPrice,
-                                                                  Map<String, Long> products,
-            PromotionRules<String,BigDecimal,Boolean>promoRules){
+                                                                  PromotionRules<String, BigDecimal,Boolean> promoRules){
         for (Map.Entry<String, BigDecimal> entry : codeToPrice.entrySet()){
             String productCode = entry.getKey();
             BigDecimal amount = entry.getValue().setScale(2,BigDecimal.ROUND_HALF_EVEN);
 
-           if( promoRules.test(productCode,amount) ){
-               prodInfo.get(productCode).setPrice(getPromotionPrice().setScale(2,BigDecimal.ROUND_HALF_EVEN));
-               BigDecimal total = prodInfo.get(productCode).getPrice().setScale(2,BigDecimal.ROUND_HALF_EVEN)
-                       .multiply(new BigDecimal(  products.get(productCode)  ))
-                               .setScale(2,BigDecimal.ROUND_HALF_EVEN);
-               totalPriceOfQuantityOfSpecificItemPurchased.put(productCode, total);
-           }
+            if( promoRules.test(productCode,amount)){
+                prodInfo.get(productCode).setPrice(getPromotionPrice().setScale(2,BigDecimal.ROUND_HALF_EVEN));
+                BigDecimal total = prodInfo.get(productCode).getPrice().setScale(2,BigDecimal.ROUND_HALF_EVEN)
+                        .multiply(new BigDecimal(codeToQuantity.get(productCode)).setScale(2,BigDecimal.ROUND_HALF_EVEN));
+                totalPriceOfQuantityOfSpecificItemPurchased.put(productCode, total);
+            }
         }
         return totalPriceOfQuantityOfSpecificItemPurchased;
     }
 
-    public static void calculateTotals( Map<String,BigDecimal> pra){
+    public static void addItemTotals( Map<String,BigDecimal> pra){
         for(Map.Entry<String, BigDecimal> entry : pra.entrySet()){
             String key = entry.getKey();
             BigDecimal value = entry.getValue().setScale(2,BigDecimal.ROUND_HALF_EVEN);
@@ -124,7 +123,7 @@ public class Main {
         System.out.println("                              ");
     }
 
-    public static void displayTotalPrice(BigDecimal percentageReduction){
+    public static BigDecimal displayShoppingTotal(BigDecimal percentageReduction){
         if(finalTotal.compareTo(new BigDecimal(60.00)) > 0){
             BigDecimal reduction = new BigDecimal(00.00).setScale(BigDecimal.ROUND_HALF_EVEN);
             reduction = finalTotal.multiply(percentageReduction
@@ -133,6 +132,8 @@ public class Main {
         }
         System.out.println("Final Total   :" + finalTotal
                 .setScale(2, BigDecimal.ROUND_HALF_EVEN));
+
+        return finalTotal;
     }
 }
 
